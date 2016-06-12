@@ -39,10 +39,10 @@ void FSanwuBPGraphShotModule::StartupModule()
 	IMainFrameModule& MainFrameModule = FModuleManager::LoadModuleChecked<IMainFrameModule>(TEXT("MainFrame"));
 	MainFrameModule.OnMainFrameCreationFinished().AddRaw(this, &FSanwuBPGraphShotModule::OnMainFrameLoad);
 
+	OnTimerDelegate.BindRaw(this, &FSanwuBPGraphShotModule::UpdateShotTimer);
 }
 void FSanwuBPGraphShotModule::OnMainFrameLoad(TSharedPtr<SWindow> InRootWindow, bool bIsNewProjectWindow)
 {
-	//InRootWindow->ReshapeWindow(FVector2D(-100, -100), FVector2D(2000, 2000));
 	FBlueprintEditorModule& BlueprintEditorModule = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
 	{
 		TSharedPtr<FExtender> BPMenuExtender = MakeShareable(new FExtender());
@@ -63,7 +63,7 @@ void FSanwuBPGraphShotModule::PluginButtonClicked()
 	TArray<TSharedRef<SDockTab>>AllTab= TabDockingArea->GetAllChildTabs();
 
 	TSharedPtr<SWindow>TabParentWin = FSlateApplication::Get().FindWidgetWindow(Tab.ToSharedRef());
-	
+
 	for (TSharedRef<SDockTab>TabIt : AllTab)
 	{
 		TSharedRef<SWidget>TabContent = TabIt->GetContent();
@@ -115,12 +115,16 @@ void FSanwuBPGraphShotModule::GetChildrenRecursion(FChildren*childrens)
 }
 void FSanwuBPGraphShotModule::HandleGraphFind(SGraphEditor* graph,TSharedRef<SWidget>Content)
 {
+	CurrentGraphEditor = graph;
+	CurrentContent = Content;
+
 	TArray<FColor> OutData;
 	FIntVector OutSize;
 	FSlateApplication::Get().TakeScreenshot(Content, OutData, OutSize);
 // 	ClipboardCopy(OutData, OutSize);
 // 	UE_LOG(LogBPShot, Warning, TEXT("Snapshot width =%d height= %d"), OutSize.X, OutSize.Y);
 	UEdGraph*GraphObj = graph->GetCurrentGraph();
+
 	
 	TArray<int32> PosXs;
 	TArray<int32> PosYs;
@@ -139,14 +143,16 @@ void FSanwuBPGraphShotModule::HandleGraphFind(SGraphEditor* graph,TSharedRef<SWi
 
 	int32 PaddingSpace = 50;
 	//Get Sizes
-	FVector2D ContentSize(OutSize.X, OutSize.Y);
-	int32 MaxNodeX = PosXs[PosXs.Num() - 1]+ PaddingSpace;
-	int32 MaxNodeY = PosYs[PosYs.Num() - 1]+ PaddingSpace;
-	int32 MinNodeX = PosXs[0]- PaddingSpace;
-	int32 MinNodeY = PosYs[0]- PaddingSpace;
+	ContentSize.X = OutSize.X;
+	ContentSize.Y = OutSize.Y;
 
-	int32 SpaceWidth = MaxNodeX - MinNodeX;
-	int32 SpaceHeight = MaxNodeY - MinNodeY;
+	 MaxNodeX = PosXs[PosXs.Num() - 1]+ PaddingSpace;
+	 MaxNodeY = PosYs[PosYs.Num() - 1]+ PaddingSpace;
+	 MinNodeX = PosXs[0]- PaddingSpace;
+	 MinNodeY = PosYs[0]- PaddingSpace;
+
+	 SpaceWidth = MaxNodeX - MinNodeX;
+	 SpaceHeight = MaxNodeY - MinNodeY;
 
 	float Remainder = 0;
 
@@ -155,6 +161,10 @@ void FSanwuBPGraphShotModule::HandleGraphFind(SGraphEditor* graph,TSharedRef<SWi
 
 	int32 RowCount = UKismetMathLibrary::FMod(SpaceHeight, ContentSize.Y, Remainder);
 	RowCount += Remainder > 0 ? 1 : 0;
+
+
+	TotalWidth = ContentSize.X*ColCount;
+	TotalHeight = ContentSize.Y*RowCount;
 
 	//
 	//
@@ -165,27 +175,113 @@ void FSanwuBPGraphShotModule::HandleGraphFind(SGraphEditor* graph,TSharedRef<SWi
 	graph->GetViewLocation(OriginViewLocation, OriginZoom);
 	
 
-	TArray<FColor> FinalData;
-
-
+	MissonPool.Empty();
 
 	for (int32 i =0;i<RowCount;i++)
 	{
-
 		for (int32 j=0;j<ColCount;j++)
 		{
 			TArray<FColor> ImageData;
-			graph->SetViewLocation(FVector2D( j*ContentSize.X+MinNodeX , i*ContentSize.Y+MinNodeY ), 1);
-			FSlateApplication::Get().TakeScreenshot(Content, ImageData, OutSize);
+			int32 px = j*ContentSize.X + MinNodeX;
+			int32 py = i*ContentSize.Y + MinNodeY;
 			
+			FIntRect ShotRect = FIntRect(0, 0,ContentSize.X , ContentSize.Y);
+			if (px+ContentSize.X >MaxNodeX )
+			{
+				//ShotRect.Max.X = MaxNodeX - px;
+			}
+			if (py+ContentSize.Y>MaxNodeY)
+			{
+				//ShotRect.Max.Y = MaxNodeY - py;
+			}
+			FShotImageData Mission = FShotImageData();
+			Mission.InnerShotArea = ShotRect;
+			Mission.LocationX = px;
+			Mission.LocationY = py;
+			MissonPool.Add(Mission);
 		}
+		CurrentMissionIndex = 0;
+		GUnrealEd->GetTimerManager()->SetTimer(ShotTimerHandler, OnTimerDelegate, 1.f, true);
 	}
 
-	//FFileHelper::CreateBitmap(*(FPaths::GameSavedDir() / "BlueprintGraphShot/"), OutSize.X, OutSize.Y, OutData.GetData());
-	graph->SetViewLocation(OriginViewLocation, OriginZoom);
+// 	graph->SetViewLocation(FVector2D(px, py), 1);
+// 	UE_LOG(LogBPShot, Warning, TEXT(" %d  %d"), px, py);
+// 	FSlateApplication::Get().TakeScreenshot(Content,/*ShotRect, */ImageData, OutSize);
+// 	FFileHelper::CreateBitmap(*(FPaths::GameSavedDir() / "BlueprintGraphShot/"), OutSize.X, OutSize.Y, OutData.GetData());
+	//graph->SetViewLocation(OriginViewLocation, OriginZoom);
 	
 	//
 	//UE_LOG(LogBPShot, Warning, TEXT(" %d  %d"), ColCount,RowCount);
+}
+void FSanwuBPGraphShotModule::UpdateShotTimer()
+{
+	FShotImageData& Mission= MissonPool[CurrentMissionIndex];
+	CurrentGraphEditor->SetViewLocation(FVector2D(Mission.LocationX,Mission.LocationY), 1);
+	UEdGraph*GraphObj = CurrentGraphEditor->GetCurrentGraph();
+	for (class UEdGraphNode* Node : GraphObj->Nodes)
+	{
+		//Node
+	}
+	FSlateApplication::Get().TakeScreenshot(CurrentContent->AsShared(), Mission.InnerShotArea, Mission.ImageData, Mission.ImageSize);
+	
+	CurrentMissionIndex++;
+
+	if (CurrentMissionIndex>MissonPool.Num()-1)
+	{
+		GUnrealEd->GetTimerManager()->ClearTimer(ShotTimerHandler);
+		FinishedShot();
+	}
+
+}
+void FSanwuBPGraphShotModule::FinishedShot()
+{
+	for (FShotImageData & ImageData : MissonPool)
+	{
+		//FFileHelper::CreateBitmap(*(FPaths::GameSavedDir() / "BlueprintGraphShot/"), ImageData.ImageSize.X, ImageData.ImageSize.Y, ImageData.ImageData.GetData());
+
+		for (int32 i=0;i<ImageData.ImageSize.Y;i++)
+		{
+			TArray<FColor> rowData;
+			for (int32 j = 0; j < ImageData.ImageSize.X; j++)
+			{
+				rowData.Add(ImageData.ImageData[ImageData.ImageSize.X*i + j]);
+			}
+			ImageData.SerializedData.Add(rowData);
+		}
+	}
+	//return;
+
+	//
+	
+
+	TArray<TArray<FColor>> PreFinishData;
+	FShotImageData& PreImageData = MissonPool[0];
+
+	for (int32 h=0;h<TotalHeight;h++)
+	{
+		PreFinishData.Add(TArray<FColor>());
+	}
+	
+	for (FShotImageData & ImageData : MissonPool)
+	{
+		for ( int32 p=0;p<ImageData.SerializedData.Num();p++ )
+		{
+			TArray<FColor> rArray = ImageData.SerializedData[p];
+			int32 fIndex = ImageData.LocationY - MinNodeY + p;
+			TArray<FColor>& PreArray = PreFinishData[fIndex];
+			PreArray.Append(rArray);
+		}
+	}
+	
+
+	TArray<FColor> FinalData;
+	for (TArray<FColor>pice : PreFinishData)
+	{
+		FinalData.Append(pice);
+	}
+
+	FFileHelper::CreateBitmap(*(FPaths::GameSavedDir() / "BlueprintGraphShot/"),TotalWidth,TotalHeight, FinalData.GetData());
+
 }
 
 void FSanwuBPGraphShotModule::AddToolbarExtension(FToolBarBuilder& Builder)
