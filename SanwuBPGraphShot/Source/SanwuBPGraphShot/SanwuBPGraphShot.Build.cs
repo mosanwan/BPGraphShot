@@ -16,7 +16,8 @@ public class SanwuBPGraphShot : ModuleRules
 		PrivateIncludePaths.AddRange(
 			new string[] {
 				"SanwuBPGraphShot/Private",
-			});
+                "Runtime/Slate/Private/Framework/Docking"
+            });
 			
 		
 		PublicDependencyModuleNames.AddRange(
@@ -24,7 +25,9 @@ public class SanwuBPGraphShot : ModuleRules
 			{
 				"Core",
                 "Kismet",
-                "MainFrame"
+                "MainFrame",
+                "Slate",
+                "UnrealEd"
 			});
 			
 		
@@ -39,6 +42,7 @@ public class SanwuBPGraphShot : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
+                "UnrealEd"
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

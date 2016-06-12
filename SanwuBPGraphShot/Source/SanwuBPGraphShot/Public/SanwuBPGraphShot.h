@@ -3,7 +3,8 @@
 #pragma once
 
 #include "ModuleManager.h"
-
+#include "GraphEditor.h"
+//#include "TabManager.h"
 class FToolBarBuilder;
 class FMenuBuilder;
 
@@ -23,6 +24,8 @@ private:
 	void AddToolbarExtension(FToolBarBuilder& Builder);
 	void AddMenuExtension(FMenuBuilder& Builder);
 	void OnMainFrameLoad(TSharedPtr<SWindow> InRootWindow, bool bIsNewProjectWindow);
+
+	void HandleGraphFind(SGraphEditor* graph);
 
 private:
 	TSharedPtr<class FUICommandList> PluginCommands;
