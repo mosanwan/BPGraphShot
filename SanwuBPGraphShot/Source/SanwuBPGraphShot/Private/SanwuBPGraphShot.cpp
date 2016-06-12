@@ -14,6 +14,7 @@
 #include "BlueprintEditorModule.h"
 #include "GraphEditor.h"
 #include "LevelEditor.h"
+#include "Kismet/KismetMathLibrary.h"
 
 static const FName SanwuBPGraphShotTabName("SanwuBPGraphShot");
 
@@ -41,6 +42,7 @@ void FSanwuBPGraphShotModule::StartupModule()
 }
 void FSanwuBPGraphShotModule::OnMainFrameLoad(TSharedPtr<SWindow> InRootWindow, bool bIsNewProjectWindow)
 {
+	//InRootWindow->ReshapeWindow(FVector2D(-100, -100), FVector2D(2000, 2000));
 	FBlueprintEditorModule& BlueprintEditorModule = FModuleManager::LoadModuleChecked<FBlueprintEditorModule>("Kismet");
 	{
 		TSharedPtr<FExtender> BPMenuExtender = MakeShareable(new FExtender());
@@ -60,39 +62,158 @@ void FSanwuBPGraphShotModule::PluginButtonClicked()
 	TSharedPtr<class SDockingArea>TabDockingArea= Tab->GetDockArea();
 	TArray<TSharedRef<SDockTab>>AllTab= TabDockingArea->GetAllChildTabs();
 
+	TSharedPtr<SWindow>TabParentWin = FSlateApplication::Get().FindWidgetWindow(Tab.ToSharedRef());
+	
 	for (TSharedRef<SDockTab>TabIt : AllTab)
 	{
 		TSharedRef<SWidget>TabContent = TabIt->GetContent();
-		//UE_LOG(LogBPShot, Warning, TEXT("%s  -> %s %d  %d  %d"), *(TabIt->GetTabLabel().ToString()), *(TabContent->ToString()),TabIt->IsForeground(),TabIt->IsVolatile(),TabIt->IsVolatileIndirectly());
-		//SGraphEditor
-		
 		if (TabIt->IsForeground()&& TabContent->ToString().Contains("SGraphEditor"))
 		{
-			UE_LOG(LogBPShot, Warning, TEXT("%s  -> %s "), *(TabIt->GetTabLabel().ToString()), *(TabContent->ToString()));
+			//UE_LOG(LogBPShot, Warning, TEXT("%s  -> %s "), *(TabIt->GetTabLabel().ToString()), *(TabContent->ToString()));
 			SGraphEditor* CurrentGraphEditor = (SGraphEditor*)&TabContent.Get();
 			FVector2D ViewLocation;
 			float ZoomScale = 1.0f;
 			CurrentGraphEditor->GetViewLocation(ViewLocation, ZoomScale);
 			UE_LOG(LogBPShot, Warning, TEXT("%f  -> %f "), ViewLocation.X,ViewLocation.Y);
+			if (CurrentGraphEditor)
+			{
+				GetChildrenRecursion(CurrentGraphEditor->GetChildren());
+				HandleGraphFind(CurrentGraphEditor,TabContent);
+			}
 		}
-		
+	}
+}
+void FSanwuBPGraphShotModule::GetChildrenRecursion(FChildren*childrens)
+{
+	if (childrens->Num() > 0)
+	{
+		for (int32 i = 0; i < childrens->Num(); i++)
+		{
+			TSharedRef<SWidget> Child = childrens->GetChildAt(i);
+			FString ChildName = Child->GetTypeAsString();
+
+			if (ChildName == FString("SGraphPanel")) //SLevelEditorWatermark  
+			{
+				//c->SetVisibility(EVisibility::Collapsed);
+				//GraphPanelWidget = Child;
+			}
+			if (ChildName == FString("STextBlock")) //
+			{
+				Child->SetVisibility(EVisibility::Collapsed);
+			}
+			if (ChildName == FString("SGraphTitleBar")) //
+			{
+				Child->SetVisibility(EVisibility::Collapsed);
+			}
+			if (!ChildName.Contains("SGraphNode"))
+			{
+				GetChildrenRecursion(Child->GetChildren());
+			}
+			
+		}
+	}
+}
+void FSanwuBPGraphShotModule::HandleGraphFind(SGraphEditor* graph,TSharedRef<SWidget>Content)
+{
+	TArray<FColor> OutData;
+	FIntVector OutSize;
+	FSlateApplication::Get().TakeScreenshot(Content, OutData, OutSize);
+// 	ClipboardCopy(OutData, OutSize);
+// 	UE_LOG(LogBPShot, Warning, TEXT("Snapshot width =%d height= %d"), OutSize.X, OutSize.Y);
+	UEdGraph*GraphObj = graph->GetCurrentGraph();
+	
+	TArray<int32> PosXs;
+	TArray<int32> PosYs;
+	for (class UEdGraphNode* Node : GraphObj->Nodes)
+	{
+		int32 currentX= Node->NodePosX;
+		int32 currentY= Node->NodePosY;
+		PosXs.Add(currentX);
+		PosYs.Add(currentY);
+		int32 currentWidth = Node->NodeWidth;
+		int32 currentHeight = Node->NodeHeight;
 	}
 
+	PosXs.Sort();
+	PosYs.Sort();
 
-	FText TabName = Tab->GetTabLabel();
-	TSharedPtr<SWindow>TabParentWin = Tab->GetParentWindow();
-	TSharedPtr<SDockingTabWell> TabParentWell = Tab->GetParent();
-	
-	
-}
-void FSanwuBPGraphShotModule::HandleGraphFind(SGraphEditor* graph)
-{
+	int32 PaddingSpace = 50;
+	//Get Sizes
+	FVector2D ContentSize(OutSize.X, OutSize.Y);
+	int32 MaxNodeX = PosXs[PosXs.Num() - 1]+ PaddingSpace;
+	int32 MaxNodeY = PosYs[PosYs.Num() - 1]+ PaddingSpace;
+	int32 MinNodeX = PosXs[0]- PaddingSpace;
+	int32 MinNodeY = PosYs[0]- PaddingSpace;
 
+	int32 SpaceWidth = MaxNodeX - MinNodeX;
+	int32 SpaceHeight = MaxNodeY - MinNodeY;
+
+	float Remainder = 0;
+
+	int32 ColCount = UKismetMathLibrary::FMod(SpaceWidth, ContentSize.X, Remainder);
+	ColCount += Remainder > 0 ? 1 : 0;
+
+	int32 RowCount = UKismetMathLibrary::FMod(SpaceHeight, ContentSize.Y, Remainder);
+	RowCount += Remainder > 0 ? 1 : 0;
+
+	//
+	//
+
+	//Save Image
+	FVector2D OriginViewLocation;
+	float OriginZoom;
+	graph->GetViewLocation(OriginViewLocation, OriginZoom);
+	
+
+	TArray<FColor> FinalData;
+
+
+
+	for (int32 i =0;i<RowCount;i++)
+	{
+
+		for (int32 j=0;j<ColCount;j++)
+		{
+			TArray<FColor> ImageData;
+			graph->SetViewLocation(FVector2D( j*ContentSize.X+MinNodeX , i*ContentSize.Y+MinNodeY ), 1);
+			FSlateApplication::Get().TakeScreenshot(Content, ImageData, OutSize);
+			
+		}
+	}
+
+	//FFileHelper::CreateBitmap(*(FPaths::GameSavedDir() / "BlueprintGraphShot/"), OutSize.X, OutSize.Y, OutData.GetData());
+	graph->SetViewLocation(OriginViewLocation, OriginZoom);
+	
+	//
+	//UE_LOG(LogBPShot, Warning, TEXT(" %d  %d"), ColCount,RowCount);
 }
 
 void FSanwuBPGraphShotModule::AddToolbarExtension(FToolBarBuilder& Builder)
 {
 	Builder.AddToolBarButton(FSanwuBPGraphShotCommands::Get().PluginAction);
+}
+
+void FSanwuBPGraphShotModule::ClipboardCopy(TArray<FColor> BitmapData, FIntVector Size)
+{
+	
+	//HBITMAP
+
+
+	const TCHAR* Str = TEXT("Hello World");
+	if (OpenClipboard(GetActiveWindow()))
+	{
+		verify(EmptyClipboard());
+		HGLOBAL GlobalMem;
+		int32 StrLen = FCString::Strlen(Str);
+		GlobalMem = GlobalAlloc(GMEM_MOVEABLE, sizeof(TCHAR)*(StrLen + 1));
+		check(GlobalMem);
+		TCHAR* Data = (TCHAR*)GlobalLock(GlobalMem);
+		FCString::Strcpy(Data, (StrLen + 1), Str);
+		GlobalUnlock(GlobalMem);
+		if (SetClipboardData(CF_BITMAP, GlobalMem) == NULL)
+			UE_LOG(LogWindows, Fatal, TEXT("SetClipboardData failed with error code %i"), (uint32)GetLastError());
+		verify(CloseClipboard());
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

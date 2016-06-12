@@ -25,9 +25,12 @@ private:
 	void AddMenuExtension(FMenuBuilder& Builder);
 	void OnMainFrameLoad(TSharedPtr<SWindow> InRootWindow, bool bIsNewProjectWindow);
 
-	void HandleGraphFind(SGraphEditor* graph);
-
+	void HandleGraphFind(SGraphEditor* graph,TSharedRef<SWidget>Content);
+	void ClipboardCopy(TArray<FColor> BitmapData, FIntVector Size);
 private:
+	void GetChildrenRecursion(FChildren*childrens);
+	
+	TSharedPtr<SWidget>GraphPanelWidget;
 	TSharedPtr<class FUICommandList> PluginCommands;
 	
 };
