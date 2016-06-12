@@ -66,4 +66,6 @@ private:
 
 	int32 TotalWidth;
 	int32 TotalHeight;
+
+	bool UpdateTrigger = false;
 };

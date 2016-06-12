@@ -201,7 +201,8 @@ void FSanwuBPGraphShotModule::HandleGraphFind(SGraphEditor* graph,TSharedRef<SWi
 			MissonPool.Add(Mission);
 		}
 		CurrentMissionIndex = 0;
-		GUnrealEd->GetTimerManager()->SetTimer(ShotTimerHandler, OnTimerDelegate, 1.f, true);
+		UpdateTrigger = false;
+		GUnrealEd->GetTimerManager()->SetTimer(ShotTimerHandler, OnTimerDelegate, 0.5, true);
 	}
 
 // 	graph->SetViewLocation(FVector2D(px, py), 1);
@@ -215,23 +216,24 @@ void FSanwuBPGraphShotModule::HandleGraphFind(SGraphEditor* graph,TSharedRef<SWi
 }
 void FSanwuBPGraphShotModule::UpdateShotTimer()
 {
+	UpdateTrigger = !UpdateTrigger;
+
 	FShotImageData& Mission= MissonPool[CurrentMissionIndex];
-	CurrentGraphEditor->SetViewLocation(FVector2D(Mission.LocationX,Mission.LocationY), 1);
-	UEdGraph*GraphObj = CurrentGraphEditor->GetCurrentGraph();
-	for (class UEdGraphNode* Node : GraphObj->Nodes)
+	if (UpdateTrigger)
 	{
-		//Node
+		CurrentGraphEditor->SetViewLocation(FVector2D(Mission.LocationX, Mission.LocationY), 1);
 	}
-	FSlateApplication::Get().TakeScreenshot(CurrentContent->AsShared(), Mission.InnerShotArea, Mission.ImageData, Mission.ImageSize);
-	
-	CurrentMissionIndex++;
+	else {
+		FSlateApplication::Get().TakeScreenshot(CurrentContent->AsShared(), Mission.InnerShotArea, Mission.ImageData, Mission.ImageSize);
 
-	if (CurrentMissionIndex>MissonPool.Num()-1)
-	{
-		GUnrealEd->GetTimerManager()->ClearTimer(ShotTimerHandler);
-		FinishedShot();
+		CurrentMissionIndex++;
+
+		if (CurrentMissionIndex > MissonPool.Num() - 1)
+		{
+			GUnrealEd->GetTimerManager()->ClearTimer(ShotTimerHandler);
+			FinishedShot();
+		}
 	}
-
 }
 void FSanwuBPGraphShotModule::FinishedShot()
 {
